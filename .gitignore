@@ -1,0 +1,20 @@
+# Python virtual environments
+.venv-traditional/
+
+# Python generated files
+__pycache__/
+*.pyc
+
+# Secrets / local configuration
+.env
+
+# Raw dissertation data
+data/raw/
+
+# Generated workload data
+data/workloads/
+data/defects/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
