@@ -1,63 +1,114 @@
 from traditional.etl.extract import extract_workload
 from traditional.etl.transform import transform_workload
+from traditional.etl.dimensions import prepare_warehouse_data
+from traditional.etl.load import load_warehouse
 
 
-def main() -> None:
-    workload_size = 10_000
+def run_pipeline(workload_size: int) -> dict:
+    """
+    Execute the complete Traditional ETL pipeline.
 
-    print(f"Loading workload: {workload_size:,} rows")
+    Returns pipeline accounting information so that
+    development and benchmark runners can reuse it.
+    """
 
+    # Extract
     raw_df = extract_workload(workload_size)
 
-    accepted_df, rejected_df = transform_workload(raw_df)
-
-    duplicate_mask = (
-        rejected_df["RejectionReason"] == "Exact Duplicate"
+    # Transform
+    accepted_df, rejected_df, duplicates_df = (
+        transform_workload(raw_df)
     )
 
-    duplicates_removed = rejected_df[duplicate_mask]
-    invalid_rejected = rejected_df[~duplicate_mask]
-
-    print()
-    print(f"Input rows:             {len(raw_df):,}")
-    print(f"Accepted rows:          {len(accepted_df):,}")
-    print(f"Rejected records:       {len(invalid_rejected):,}")
-    print(f"Duplicates removed:     {len(duplicates_removed):,}")
-
+    # Row-accounting validation
     accounted_rows = (
         len(accepted_df)
-        + len(invalid_rejected)
-        + len(duplicates_removed)
+        + len(rejected_df)
+        + len(duplicates_df)
     )
-
-    print(f"Accounted rows:         {accounted_rows:,}")
 
     if accounted_rows != len(raw_df):
         raise AssertionError(
             "Row accounting failed: "
-            "input does not equal accepted + rejected + duplicates."
+            "accepted + rejected + duplicates "
+            "does not equal input."
         )
 
-    print()
-    print("Rejection reasons:")
-    print(
-        invalid_rejected["RejectionReason"]
-        .value_counts(dropna=False)
+    # Prepare warehouse datasets
+    warehouse_data = prepare_warehouse_data(
+        accepted_df
     )
 
+    # Build audit information
+    audit_data = {
+        "workload_size": workload_size,
+        "records_input": len(raw_df),
+        "records_accepted": len(accepted_df),
+        "records_rejected": len(rejected_df),
+        "duplicates_removed": len(duplicates_df),
+
+        "missing_customer_count": int(
+            accepted_df["MissingCustomerFlag"].sum()
+        ),
+
+        "missing_description_count": int(
+            accepted_df["MissingDescriptionFlag"].sum()
+        ),
+
+        "cancellation_count": int(
+            accepted_df["IsCancellation"].sum()
+        ),
+    }
+
+    # Load PostgreSQL
+    load_warehouse(
+        warehouse_data,
+        audit_data,
+    )
+
+    # Return reusable pipeline metrics
+    return audit_data
+
+
+def main() -> None:
+    """Development/manual execution entry point."""
+
+    workload_size = 10_000
+
+    print(
+        f"Running Traditional pipeline: "
+        f"{workload_size:,} rows"
+    )
+
+    result = run_pipeline(workload_size)
+
     print()
-    print("Quality flags in accepted records:")
+    print("Pipeline complete.")
+    print()
+    print(f"Input rows:          {result['records_input']:,}")
     print(
-        "Missing Customer ID:",
-        accepted_df["MissingCustomerFlag"].sum(),
+        f"Accepted rows:       "
+        f"{result['records_accepted']:,}"
     )
     print(
-        "Missing Description:",
-        accepted_df["MissingDescriptionFlag"].sum(),
+        f"Rejected records:    "
+        f"{result['records_rejected']:,}"
     )
     print(
-        "Cancellations:",
-        accepted_df["IsCancellation"].sum(),
+        f"Duplicates removed:  "
+        f"{result['duplicates_removed']:,}"
+    )
+    print(
+        f"Missing customers:   "
+        f"{result['missing_customer_count']:,}"
+    )
+    print(
+        f"Missing descriptions:"
+        f" {result['missing_description_count']:,}"
+    )
+    print(
+        f"Cancellations:       "
+        f"{result['cancellation_count']:,}"
     )
 
 

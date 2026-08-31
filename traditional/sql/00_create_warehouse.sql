@@ -63,3 +63,20 @@ CREATE TABLE IF NOT EXISTS traditional_dw.fact_sales (
         FOREIGN KEY (country_key)
         REFERENCES traditional_dw.dim_country(country_key)
 );
+
+CREATE TABLE IF NOT EXISTS traditional_dw.pipeline_run_audit (
+    run_id BIGSERIAL PRIMARY KEY,
+
+    workload_size INTEGER NOT NULL,
+
+    records_input INTEGER NOT NULL,
+    records_accepted INTEGER NOT NULL,
+    records_rejected INTEGER NOT NULL,
+    duplicates_removed INTEGER NOT NULL,
+
+    missing_customer_count INTEGER NOT NULL,
+    missing_description_count INTEGER NOT NULL,
+    cancellation_count INTEGER NOT NULL,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
