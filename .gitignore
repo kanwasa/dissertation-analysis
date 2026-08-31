@@ -1,6 +1,6 @@
 # Python virtual environments
 .venv-traditional/
-
+.venv-modern/
 # Python generated files
 __pycache__/
 *.pyc
