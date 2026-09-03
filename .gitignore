@@ -18,3 +18,7 @@ data/defects/
 # OS/editor noise
 .DS_Store
 Thumbs.db
+
+# modern implementation env details and the logs.
+modern/airflow/.env
+modern/airflow/logs/

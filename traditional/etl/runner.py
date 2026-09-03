@@ -2,7 +2,7 @@ from traditional.etl.extract import extract_workload
 from traditional.etl.transform import transform_workload
 from traditional.etl.dimensions import prepare_warehouse_data
 from traditional.etl.load import load_warehouse
-
+import argparse
 
 def run_pipeline(workload_size: int) -> dict:
     """
@@ -71,9 +71,21 @@ def run_pipeline(workload_size: int) -> dict:
 
 
 def main() -> None:
-    """Development/manual execution entry point."""
+    parser = argparse.ArgumentParser(
+        description="Run the Traditional ETL pipeline."
+    )
 
-    workload_size = 10_000
+    parser.add_argument(
+        "--records",
+        type=int,
+        default=5_000,
+        choices=[5_000, 10_000, 50_000, 100_000],
+        help="Workload size to process.",
+    )
+
+    args = parser.parse_args()
+
+    workload_size = args.records
 
     print(
         f"Running Traditional pipeline: "
@@ -86,30 +98,15 @@ def main() -> None:
     print("Pipeline complete.")
     print()
     print(f"Input rows:          {result['records_input']:,}")
+    print(f"Accepted rows:       {result['records_accepted']:,}")
+    print(f"Rejected records:    {result['records_rejected']:,}")
+    print(f"Duplicates removed:  {result['duplicates_removed']:,}")
+    print(f"Missing customers:   {result['missing_customer_count']:,}")
     print(
-        f"Accepted rows:       "
-        f"{result['records_accepted']:,}"
+        f"Missing descriptions: "
+        f"{result['missing_description_count']:,}"
     )
-    print(
-        f"Rejected records:    "
-        f"{result['records_rejected']:,}"
-    )
-    print(
-        f"Duplicates removed:  "
-        f"{result['duplicates_removed']:,}"
-    )
-    print(
-        f"Missing customers:   "
-        f"{result['missing_customer_count']:,}"
-    )
-    print(
-        f"Missing descriptions:"
-        f" {result['missing_description_count']:,}"
-    )
-    print(
-        f"Cancellations:       "
-        f"{result['cancellation_count']:,}"
-    )
+    print(f"Cancellations:       {result['cancellation_count']:,}")
 
 
 if __name__ == "__main__":

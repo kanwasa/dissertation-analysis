@@ -1,0 +1,7 @@
+version: 2
+
+sources:
+  - name: modern_raw
+    schema: modern_raw
+    tables:
+      - name: online_retail_raw

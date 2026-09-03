@@ -1,0 +1,79 @@
+version: 2
+
+models:
+
+  - name: fact_sales
+    description: "Accepted sales records used by the Modern analytical layer."
+    columns:
+      - name: invoice_no
+        tests:
+          - not_null
+
+      - name: stock_code
+        tests:
+          - not_null
+
+      - name: full_timestamp
+        tests:
+          - not_null
+
+      - name: quantity
+        tests:
+          - not_null
+
+      - name: unit_price
+        tests:
+          - not_null
+
+      - name: sales_amount
+        tests:
+          - not_null
+
+  - name: dim_product
+    columns:
+      - name: stock_code
+        tests:
+          - not_null
+          - unique
+
+  - name: dim_customer
+    columns:
+      - name: customer_id
+        tests:
+          - not_null
+          - unique
+
+  - name: dim_country
+    columns:
+      - name: country_name
+        tests:
+          - not_null
+          - unique
+
+  - name: total_sales
+    columns:
+      - name: total_sales
+        tests:
+          - not_null
+
+  - name: quality_summary
+    columns:
+      - name: workload_size
+        tests:
+          - not_null
+
+      - name: records_input
+        tests:
+          - not_null
+
+      - name: records_accepted
+        tests:
+          - not_null
+
+      - name: records_rejected
+        tests:
+          - not_null
+
+      - name: duplicates_removed
+        tests:
+          - not_null

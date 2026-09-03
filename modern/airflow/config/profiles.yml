@@ -1,0 +1,13 @@
+modern_analytics:
+  target: dev
+
+  outputs:
+    dev:
+      type: postgres
+      host: host.docker.internal
+      port: 5432
+      user: postgres
+      password: "{{ env_var('DB_PASSWORD') }}"
+      dbname: dissertation_analytics
+      schema: modern_dw
+      threads: 1
