@@ -3,8 +3,11 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
+import argparse
 
 import psutil
+import threading
+
 
 from traditional.benchmark.metrics import BenchmarkMetrics
 from traditional.etl.load import get_connection
@@ -67,6 +70,29 @@ def save_metrics(metrics: BenchmarkMetrics) -> None:
         writer.writerow(row)
 
 
+def monitor_peak_memory(
+    process: psutil.Process,
+    stop_event: threading.Event,
+    result: dict,
+) -> None:
+    """Sample process RSS and retain the highest observed value."""
+
+    peak_rss = process.memory_info().rss
+
+    while not stop_event.is_set():
+        try:
+            current_rss = process.memory_info().rss
+            peak_rss = max(peak_rss, current_rss)
+        except psutil.Error:
+            break
+
+        time.sleep(0.01)
+
+    result["peak_memory_mb"] = (
+        peak_rss / (1024 * 1024)
+    )
+
+
 def benchmark_run(
     workload_size: int,
     run_number: int,
@@ -78,8 +104,24 @@ def benchmark_run(
 
     process = psutil.Process(os.getpid())
 
-    memory_before = process.memory_info().rss
     cpu_before = process.cpu_times()
+
+
+    stop_event = threading.Event()
+    memory_result = {}
+
+    memory_thread = threading.Thread(
+        target=monitor_peak_memory,
+        args=(
+            process,
+            stop_event,
+            memory_result,
+        ),
+        daemon=True,
+    )
+
+    memory_thread.start()
+
 
     start_time = datetime.now()
     start_counter = time.perf_counter()
@@ -88,8 +130,14 @@ def benchmark_run(
     error_message = None
     result = None
 
+    stage_timings = {}
+
     try:
-        result = run_pipeline(workload_size)
+
+        result = run_pipeline(
+            workload_size,
+            stage_timings=stage_timings,
+        )
 
     except Exception as exc:
         success = False
@@ -100,8 +148,14 @@ def benchmark_run(
     end_counter = time.perf_counter()
     end_time = datetime.now()
 
+
+    stop_event.set()
+    memory_thread.join()
+
+    observed_memory_mb = memory_result.get(
+        "peak_memory_mb"
+    )
     cpu_after = process.cpu_times()
-    memory_after = process.memory_info().rss
 
     execution_seconds = (
         end_counter - start_counter
@@ -112,10 +166,7 @@ def benchmark_run(
         + (cpu_after.system - cpu_before.system)
     )
 
-    observed_memory_mb = (
-        max(memory_before, memory_after)
-        / (1024 * 1024)
-    )
+    
 
     if result is not None:
         records_input = result["records_input"]
@@ -135,6 +186,7 @@ def benchmark_run(
         )
     else:
         throughput = 0.0
+
 
     metrics = BenchmarkMetrics(
         architecture="Traditional",
@@ -159,6 +211,20 @@ def benchmark_run(
         cpu_time_seconds=cpu_time_seconds,
         peak_memory_mb=observed_memory_mb,
         error_message=error_message,
+
+
+
+        extract_seconds=stage_timings.get("extract_seconds"),
+        transform_seconds=stage_timings.get("transform_seconds"),
+        prepare_seconds=stage_timings.get("prepare_seconds"),
+        load_seconds=stage_timings.get("load_seconds"),
+
+        ingestion_seconds=None,
+        staging_seconds=None,
+        intermediate_seconds=None,
+        marts_seconds=None,
+
+        orchestration_overhead_seconds=None,
     )
 
     save_metrics(metrics)
@@ -167,26 +233,45 @@ def benchmark_run(
 
 
 def main() -> None:
-    """Development test of benchmark instrumentation."""
+    """Run one Traditional benchmark observation."""
 
-    workload_size = 5_000
-    run_number = 1
+    parser = argparse.ArgumentParser(
+        description="Benchmark the Traditional ETL pipeline."
+    )
+
+    parser.add_argument(
+        "--records",
+        type=int,
+        required=True,
+        choices=[5_000, 10_000, 50_000, 100_000],
+        help="Workload size to benchmark.",
+    )
+
+    parser.add_argument(
+        "--run",
+        type=int,
+        required=True,
+        help="Benchmark repetition number.",
+    )
+
+    args = parser.parse_args()
 
     print(
         f"Benchmarking Traditional pipeline: "
-        f"{workload_size:,} rows"
+        f"{args.records:,} rows "
+        f"(run {args.run})"
     )
 
+    
+
     metrics = benchmark_run(
-        workload_size,
-        run_number,
+        workload_size=args.records,
+        run_number=args.run,
     )
 
     print()
     print("Benchmark observation:")
-    print(
-        f"Success:       {metrics.success}"
-    )
+    print(f"Success:       {metrics.success}")
     print(
         f"Execution:     "
         f"{metrics.execution_seconds:.4f} seconds"
@@ -204,29 +289,13 @@ def main() -> None:
         f"Observed RAM:  "
         f"{metrics.peak_memory_mb:.2f} MB"
     )
-    print(
-        f"Input:         "
-        f"{metrics.records_input:,}"
-    )
-    print(
-        f"Output:        "
-        f"{metrics.records_output:,}"
-    )
-    print(
-        f"Rejected:      "
-        f"{metrics.records_rejected:,}"
-    )
-    print(
-        f"Duplicates:    "
-        f"{metrics.duplicates_removed:,}"
-    )
+    print(f"Input:         {metrics.records_input:,}")
+    print(f"Output:        {metrics.records_output:,}")
+    print(f"Rejected:      {metrics.records_rejected:,}")
+    print(f"Duplicates:    {metrics.duplicates_removed:,}")
 
     if metrics.error_message:
-        print(
-            f"Error:         "
-            f"{metrics.error_message}"
-        )
-
+        print(f"Error:         {metrics.error_message}")
 
 if __name__ == "__main__":
     main()

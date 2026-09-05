@@ -3,8 +3,13 @@ from traditional.etl.transform import transform_workload
 from traditional.etl.dimensions import prepare_warehouse_data
 from traditional.etl.load import load_warehouse
 import argparse
+import time
 
-def run_pipeline(workload_size: int) -> dict:
+
+def run_pipeline(
+    workload_size: int,
+    stage_timings: dict | None = None,
+) -> dict:
     """
     Execute the complete Traditional ETL pipeline.
 
@@ -12,13 +17,28 @@ def run_pipeline(workload_size: int) -> dict:
     development and benchmark runners can reuse it.
     """
 
+    start = time.perf_counter() #start the timer
+
     # Extract
     raw_df = extract_workload(workload_size)
+
+    if stage_timings is not None:
+        stage_timings["extract_seconds"] = (time.perf_counter() - start)
+       
+    start = time.perf_counter() #start the timer
+
 
     # Transform
     accepted_df, rejected_df, duplicates_df = (
         transform_workload(raw_df)
     )
+
+    if stage_timings is not None:
+        stage_timings["transform_seconds"] = (
+        time.perf_counter() - start
+    )
+
+
 
     # Row-accounting validation
     accounted_rows = (
@@ -34,9 +54,16 @@ def run_pipeline(workload_size: int) -> dict:
             "does not equal input."
         )
 
+    start = time.perf_counter() # again start it for warehouse prep
+
     # Prepare warehouse datasets
     warehouse_data = prepare_warehouse_data(
         accepted_df
+    )
+
+    if stage_timings is not None:
+        stage_timings["prepare_seconds"] = (
+        time.perf_counter() - start
     )
 
     # Build audit information
@@ -60,10 +87,17 @@ def run_pipeline(workload_size: int) -> dict:
         ),
     }
 
+    start = time.perf_counter()#timer for load procedure
+
     # Load PostgreSQL
     load_warehouse(
         warehouse_data,
         audit_data,
+    )
+
+    if stage_timings is not None:
+        stage_timings["load_seconds"] = (
+        time.perf_counter() - start
     )
 
     # Return reusable pipeline metrics

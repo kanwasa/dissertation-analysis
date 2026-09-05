@@ -27,5 +27,21 @@ class BenchmarkMetrics:
     peak_memory_mb: float | None = None
     error_message: str | None = None
 
+
+    extract_seconds: float | None = None
+    transform_seconds: float | None = None
+    prepare_seconds: float | None = None
+    load_seconds: float | None = None
+
+
+    ingestion_seconds: float | None = None
+    validation_seconds: float | None = None
+    staging_seconds: float | None = None
+    intermediate_seconds: float | None = None
+    marts_seconds: float | None = None
+
+    
+    orchestration_overhead_seconds: float | None = None
+
     def to_dict(self) -> dict:
         return asdict(self)
