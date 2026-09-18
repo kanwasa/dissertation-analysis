@@ -227,38 +227,42 @@ def wait_for_dag(
         time.sleep(2)
 
 
-def read_pipeline_counts() -> dict:
-    """Read Modern pipeline accounting results."""
+def read_pipeline_counts(workload_size: int) -> dict:
+    """Read accounting results from objects refreshed by the benchmark DAG."""
 
     with get_connection() as conn:
         with conn.cursor() as cur:
 
             cur.execute(
                 """
-                SELECT
-                    records_input,
-                    records_accepted,
-                    records_rejected,
-                    duplicates_removed
-                FROM modern_dw.quality_summary
-                LIMIT 1;
+                SELECT COUNT(*)
+                FROM modern_dw.int_accepted_records;
                 """
             )
+            records_output = cur.fetchone()[0]
 
-            row = cur.fetchone()
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM modern_dw.int_rejected_records;
+                """
+            )
+            records_rejected = cur.fetchone()[0]
 
-    if row is None:
-        raise RuntimeError(
-            "Modern quality_summary returned no row."
-        )
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM modern_dw.int_duplicate_records;
+                """
+            )
+            duplicates_removed = cur.fetchone()[0]
 
     return {
-        "records_input": row[0],
-        "records_output": row[1],
-        "records_rejected": row[2],
-        "duplicates_removed": row[3],
+        "records_input": workload_size,
+        "records_output": records_output,
+        "records_rejected": records_rejected,
+        "duplicates_removed": duplicates_removed,
     }
-
 
 def save_metrics(metrics: BenchmarkMetrics) -> None:
     """Append one Modern benchmark observation."""
@@ -373,7 +377,7 @@ def benchmark_run(
                 f"Airflow DAG finished with state: {state}"
             )
 
-        counts = read_pipeline_counts()
+    
 
     except Exception as exc:
         success = False
@@ -387,6 +391,18 @@ def benchmark_run(
     execution_seconds = (
         end_counter - start_counter
     )
+
+    # Read verification counts outside the measured benchmark boundary
+    if success:
+        try:
+            counts = read_pipeline_counts(workload_size)
+        except Exception as exc:
+            counts = None
+            success = False
+            error_message = (
+                f"Post-run count verification failed: {exc}"
+            )
+
 
     # Retrieve individual Airflow task durations
     # only if a DAG run was actually created.
